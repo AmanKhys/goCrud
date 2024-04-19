@@ -1,1 +1,1 @@
-package GoCrud
+package main
