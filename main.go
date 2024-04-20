@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	//	"github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
@@ -13,8 +13,8 @@ import (
 
 const (
 	dbDriver = "mysql"
-	dbUser   = "dbUser"
-	dbPass   = "dbPass"
+	dbUser   = "root"
+	dbPass   = "my-secret-pw"
 	dbName   = "gocrud_app"
 )
 
@@ -24,18 +24,25 @@ func main() {
 
 	// define http routes using the router
 	r.HandleFunc("/user", createUserHandler).Methods("POST")
-	//	r.HandleFunc("/user/{id}", getUserHandler).Methods("GET")
-	//	r.HandleFunc("/user{id}", updateUserHandler).Methods("PUT")
-	//	r.HandleFunc("/user{id}", deleteUserHandler).Methods("DELETE")
+	r.HandleFunc("/user/{id}", getUserHandler).Methods("GET")
+	r.HandleFunc("/user/{id}", updateUserHandler).Methods("PUT")
+	r.HandleFunc("/user/{id}", deleteUserHandler).Methods("DELETE")
 
 	// start http port on the server 8090
 	log.Println("Server listening on the port 8090")
 	log.Fatal(http.ListenAndServe(":8090", r))
 }
 
+// //////////////////////////////////////////////////////////////////////
+type User struct {
+	ID    int
+	Name  string
+	Email string
+}
+
 // ////////////////////////////////////////////////////////////////
 func createUserHandler(w http.ResponseWriter, r *http.Request) {
-	db, err := sql.Open(dbDriver, dbUser+":"+"@/"+dbName)
+	db, err := sql.Open(dbDriver, dbUser+":"+dbPass+"@/"+dbName)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -45,7 +52,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var user User
 	json.NewDecoder(r.Body).Decode(&user)
 
-	CreateUser(db, user.Name, user.Email)
+	err = CreateUser(db, user.Name, user.Email)
 	if err != nil {
 		http.Error(w, "Failed to create  user", http.StatusInternalServerError)
 	}
@@ -60,13 +67,6 @@ func CreateUser(db *sql.DB, name, email string) error {
 		return err
 	}
 	return nil
-}
-
-// //////////////////////////////////////////////////////////////////////
-type User struct {
-	ID    int
-	Name  string
-	Email string
 }
 
 // /////////////////////////////////////////////////////////////////////////
@@ -106,4 +106,77 @@ func GetUser(db *sql.DB, id int) (*User, error) {
 		return nil, err
 	}
 	return user, nil
+}
+
+// /////////////////////////////////////////////////////////////////
+func updateUserHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := sql.Open(dbDriver, dbUser+":"+dbPass+"@/"+dbName)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+
+	//Get the 'id' parameter from the URL
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	// Convert 'id' to  an integer
+	userID, err := strconv.Atoi(idStr)
+
+	var user User
+	json.NewDecoder(r.Body).Decode(&user)
+
+	// Call the UpdateUser function to update the user data from the database
+	err = UpdateUser(db, userID, user.Name, user.Email)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+	fmt.Fprintln(w, "User updated successfully")
+
+}
+
+func UpdateUser(db *sql.DB, id int, name, email string) error {
+	query := "UPDATE users SET name = ?, email = ? WHERE id = ?"
+	_, err := db.Exec(query, name, email, id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ////////////////////////////////////////////////////////////////////
+func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := sql.Open(dbDriver, dbUser+":"+dbPass+"@/"+dbName)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+
+	// Get the 'id' parameter from the URL
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	// Convert 'id' to an integer
+	userID, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid  'id' parameter", http.StatusBadRequest)
+		return
+	}
+
+	err = DeleteUser(db, userID)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+	}
+
+	fmt.Fprintln(w, "User deleted successfully")
+}
+
+func DeleteUser(db *sql.DB, id int) error {
+	query := "DELETE FROM users WHERE  id = ?"
+	_, err := db.Exec(query, id)
+	if err != nil {
+		return err
+	}
+	return nil
 }
